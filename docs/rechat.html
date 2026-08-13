@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Orbit Chat</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: '#5b56d6',
+            'brand-hover': '#4a45bd',
+            'brand-soft': '#efefff',
+            ink: '#172033',
+            muted: '#667085',
+            line: '#e5e7eb',
+            panel: '#f8fafc'
+          },
+          boxShadow: {
+            panel: '0 1px 3px rgba(16,24,40,.06)',
+            modal: '0 24px 70px rgba(16,24,40,.24)'
+          }
+        }
+      }
+    }
+  </script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #172033;
+      background: #f8fafc;
+      font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+    button, input, textarea, select { font: inherit; }
+    .scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .scrollbar::-webkit-scrollbar-thumb {
+      background: #d0d5dd;
+      border-radius: 99px;
+    }
+    .message-content p { margin: 0 0 10px; }
+    .message-content p:last-child { margin-bottom: 0; }
+    .message-content code {
+      color: #c7d2fe;
+      background: #18212f;
+      border-radius: 5px;
+      padding: 2px 5px;
+      font-size: 12px;
+    }
+    .message-content pre {
+      overflow: auto;
+      color: #dbe5f1;
+      background: #18212f;
+      border-radius: 10px;
+      padding: 14px;
+      margin-top: 12px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .mobile-only { display: none; }
+
+    @media (max-width: 1179px) {
+      .inspector { display: none; }
+    }
+
+    @media (max-width: 759px) {
+      .rail { display: none; }
+      .mobile-only { display: flex; }
+      .desktop-sidebar {
+        position: fixed;
+        z-index: 60;
+        top: 0;
+        bottom: 58px;
+        left: 0;
+        width: 286px;
+        transform: translateX(-105%);
+        transition: transform .2s ease;
+        box-shadow: 10px 0 30px rgba(16,24,40,.14);
+      }
+      .desktop-sidebar.open { transform: translateX(0); }
+      .mobile-nav { display: flex !important; }
+      .chat-main { padding-bottom: 58px; }
+      .composer { bottom: 58px !important; }
+      .message-wrap { padding-left: 16px; padding-right: 16px; }
+    }
+  </style>
+</head>
+
+<body>
+<div id="app" class="h-screen overflow-hidden">
+
+  <!-- 桌面导轨 -->
+  <aside class="rail fixed inset-y-0 left-0 z-40 flex w-[68px] flex-col items-center border-r border-line bg-white py-4">
+    <div class="mb-8 flex h-10 w-10 items-center justify-center rounded-2xl bg-brand text-white shadow-md">
+      <i data-lucide="orbit" class="h-5 w-5"></i>
+    </div>
+
+    <nav class="flex flex-col gap-3">
+      <button v-for="item in navItems"
+        @click="view = item.id"
+        :title="item.label"
+        :aria-label="item.label"
+        :class="view === item.id ? 'bg-brand-soft text-brand' : 'text-muted hover:bg-gray-100'"
+        class="flex h-10 w-10 items-center justify-center rounded-xl transition">
+        <i :data-lucide="item.icon" class="h-[18px] w-[18px]"></i>
+      </button>
+    </nav>
+
+    <div class="mt-auto flex flex-col items-center gap-3">
+      <button @click="toggleTheme" title="切换主题" class="flex h-10 w-10 items-center justify-center rounded-xl text-muted hover:bg-gray-100">
+        <i :data-lucide="dark ? 'sun' : 'moon'" class="h-[18px] w-[18px]"></i>
+      </button>
+      <div class="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-brand">L</div>
+    </div>
+  </aside>
+
+  <!-- 移动端侧栏遮罩 -->
+  <div v-if="sidebarOpen && mobile" @click="sidebarOpen = false"
+    class="fixed inset-0 z-50 bg-slate-900/25"></div>
+
+  <!-- 对话侧栏 -->
+  <aside :class="{ open: sidebarOpen || !mobile }"
+    class="desktop-sidebar fixed bottom-0 left-[68px] top-0 z-30 flex w-[276px] flex-col border-r border-line bg-white">
+
+    <div class="flex h-[60px] items-center justify-between border-b border-line px-4">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-soft text-brand">
+          <i data-lucide="orbit" class="h-4 w-4"></i>
+        </div>
+        <span class="font-semibold tracking-tight">Orbit Chat</span>
+      </div>
+      <button @click="createTopic" title="新建话题" class="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-gray-100">
+        <i data-lucide="plus" class="h-4 w-4"></i>
+      </button>
+    </div>
+
+    <div class="border-b border-line p-3">
+      <button @click="createTopic"
+        class="flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-3 py-2.5 text-sm font-medium text-white transition hover:bg-brand-hover">
+        <i data-lucide="square-pen" class="h-4 w-4"></i>
+        新建对话
+      </button>
+    </div>
+
+    <div class="border-b border-line p-3">
+      <div class="mb-2 flex items-center justify-between">
+        <span class="text-[11px] font-semibold uppercase tracking-wider text-muted">Assistants</span>
+        <button title="管理助手" class="text-muted hover:text-brand">
+          <i data-lucide="settings-2" class="h-4 w-4"></i>
+        </button>
+      </div>
+      <button class="flex w-full items-center gap-3 rounded-xl bg-brand-soft px-3 py-2 text-left">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-brand shadow-sm">
+          <i data-lucide="sparkles" class="h-4 w-4"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="truncate text-sm font-medium">Orbit Assistant</div>
+          <div class="text-xs text-muted">GPT-4o · OpenAI</div>
+        </div>
+        <i data-lucide="chevron-down" class="h-4 w-4 text-muted"></i>
+      </button>
+    </div>
+
+    <div class="flex items-center justify-between px-4 pb-2 pt-4">
+      <span class="text-[11px] font-semibold uppercase tracking-wider text-muted">Topics</span>
+      <button @click="view = 'search'" title="搜索历史" class="text-muted hover:text-brand">
+        <i data-lucide="search" class="h-4 w-4"></i>
+      </button>
+    </div>
+
+    <div class="scrollbar flex-1 overflow-y-auto px-2">
+      <div v-if="topics.length === 0" class="px-3 py-10 text-center">
+        <i data-lucide="message-circle-dashed" class="mx-auto mb-3 h-8 w-8 text-slate-300"></i>
+        <p class="text-sm font-medium">还没有话题</p>
+        <p class="mt-1 text-xs text-muted">开始一次新的对话</p>
+      </div>
+
+      <template v-else>
+        <div class="px-2 pb-1 pt-1 text-[11px] font-medium text-muted">置顶</div>
+        <button v-for="topic in topics.filter(x => x.pinned)"
+          @click="selectTopic(topic)"
+          :class="activeTopic.id === topic.id ? 'bg-gray-100 text-ink' : 'text-muted hover:bg-gray-50'"
+          class="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm">
+          <i data-lucide="pin" class="h-3.5 w-3.5 shrink-0 text-brand"></i>
+          <span class="min-w-0 flex-1 truncate">{{ topic.title }}</span>
+          <i data-lucide="more-horizontal" class="h-4 w-4 opacity-0 group-hover:opacity-100"></i>
+        </button>
+
+        <div class="px-2 pb-1 pt-4 text-[11px] font-medium text-muted">最近</div>
+        <button v-for="topic in topics.filter(x => !x.pinned)"
+          @click="selectTopic(topic)"
+          :class="activeTopic.id === topic.id ? 'bg-gray-100 text-ink' : 'text-muted hover:bg-gray-50'"
+          class="group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm">
+          <i data-lucide="message-square" class="h-3.5 w-3.5 shrink-0 text-slate-400"></i>
+          <span class="min-w-0 flex-1 truncate">{{ topic.title }}</span>
+          <i data-lucide="more-horizontal" class="h-4 w-4 opacity-0 group-hover:opacity-100"></i>
+        </button>
+      </template>
+    </div>
+
+    <div class="border-t border-line p-3">
+      <div class="flex items-center gap-2 rounded-xl bg-panel px-3 py-2.5">
+        <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+        <span class="text-xs text-muted">本地数据已保存</span>
+        <i data-lucide="database" class="ml-auto h-4 w-4 text-muted"></i>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 主区 -->
+  <main class="ml-[344px] flex h-screen min-w-0 flex-col bg-white max-[759px]:ml-0">
+
+    <!-- 对话视图 -->
+    <template v-if="view === 'chat'">
+      <header class="flex h-[60px] shrink-0 items-center justify-between border-b border-line px-5">
+        <div class="flex min-w-0 items-center gap-3">
+          <button @click="sidebarOpen = !sidebarOpen" title="打开或关闭侧栏" class="mobile-only h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-gray-100">
+            <i data-lucide="menu" class="h-5 w-5"></i>
+          </button>
+          <button @click="sidebarOpen = !sidebarOpen" title="侧栏" class="hidden h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-gray-100 md:flex">
+            <i data-lucide="panel-left" class="h-4 w-4"></i>
+          </button>
+          <div class="min-w-0">
+            <div class="truncate text-sm font-semibold">{{ activeTopic.title }}</div>
+            <div class="flex items-center gap-1 text-xs text-muted">
+              <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+              GPT-4o · 已就绪
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <span class="mr-2 hidden items-center gap-1.5 text-xs text-muted sm:flex">
+            <i data-lucide="cloud-check" class="h-4 w-4 text-emerald-600"></i>已保存
+          </span>
+          <button @click="inspectorOpen = !inspectorOpen" title="打开检查器" class="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-gray-100">
+            <i data-lucide="panel-right" class="h-4 w-4"></i>
+          </button>
+          <button @click="view = 'settings'" title="设置" class="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-gray-100">
+            <i data-lucide="settings" class="h-4 w-4"></i>
+          </button>
+        </div>
+      </header>
+
+      <div class="flex min-h-0 flex-1">
+        <section class="relative flex min-w-0 flex-1 flex-col">
+          <div v-if="offline" class="flex items-center justify-center gap-2 bg-amber-50 px-4 py-2 text-xs text-amber-800">
+            <i data-lucide="wifi-off" class="h-3.5 w-3.5"></i>
+            当前处于离线状态，已保存内容仍可查看
+          </div>
+
+          <div ref="messageArea" class="scrollbar message-wrap flex-1 overflow-y-auto px-6 pb-36 pt-8">
+            <div class="mx-auto max-w-[820px]">
+
+              <div v-if="activeTopic.messages.length === 0" class="flex min-h-[54vh] flex-col items-center justify-center text-center">
+                <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-brand-soft text-brand">
+                  <i data-lucide="sparkles" class="h-8 w-8"></i>
+                </div>
+                <h1 class="text-2xl font-semibold tracking-tight">今天想聊点什么？</h1>
+                <p class="mt-2 text-sm text-muted">本地优先 · 多 Provider · 数据自主可控</p>
+                <div class="mt-7 grid w-full max-w-[620px] grid-cols-1 gap-3 sm:grid-cols-2">
+                  <button v-for="prompt in prompts" @click="draft = prompt"
+                    class="rounded-xl border border-line bg-white p-4 text-left text-sm transition hover:border-brand hover:bg-brand-soft">
+                    <div class="mb-2 flex items-center gap-2 font-medium">
+                      <i :data-lucide="prompt.icon" class="h-4 w-4 text-brand"></i>
+                      {{ prompt.title }}
+                    </div>
+                    <p class="text-xs leading-5 text-muted">{{ prompt.text }}</p>
+                  </button>
+                </div>
+              </div>
+
+              <div v-for="message in activeTopic.messages" :key="message.id" class="mb-7 flex gap-3">
+                <div v-if="message.role === 'assistant'"
+                  class="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-brand text-white">
+                  <i data-lucide="orbit" class="h-4 w-4"></i>
+                </div>
+                <div :class="message.role === 'user'
+                    ? 'ml-auto max-w-[78%] rounded-2xl rounded-tr-md bg-brand px-4 py-3 text-white'
+                    : 'max-w-[86%] pt-1'"
+                  class="message-content text-sm leading-7">
+                  <div v-if="message.thinking" class="mb-3 rounded-xl border border-violet-100 bg-violet-50 p-3 text-xs text-violet-700">
+                    <div class="mb-1 flex items-center gap-2 font-medium">
+                      <i data-lucide="brain" class="h-3.5 w-3.5"></i>
+                      思考过程
+                      <i data-lucide="chevron-down" class="ml-auto h-3.5 w-3.5"></i>
+                    </div>
+                    <div class="leading-5 opacity-80">{{ message.thinking }}</div>
+                  </div>
+                  <div v-html="message.html"></div>
+                  <div v-if="message.status === 'streaming'" class="mt-2 flex items-center gap-2 text-xs text-muted">
+                    <span class="flex gap-1">
+                      <i class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand"></i>
+                      <i class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand [animation-delay:120ms]"></i>
+                      <i class="h-1.5 w-1.5 animate-bounce rounded-full bg-brand [animation-delay:240ms]"></i>
+                    </span>
+                    生成中
+                  </div>
+                  <div v-if="message.status === 'stopped'" class="mt-2 text-xs text-muted">已停止生成</div>
+                  <div v-if="message.error" class="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                    {{ message.error }}
+                    <button @click="retryMessage(message)" class="ml-3 font-medium underline">重试</button>
+                  </div>
+                  <div v-if="message.role === 'assistant' && message.status === 'complete'"
+                    class="mt-3 flex items-center gap-1 text-muted">
+                    <button title="复制" class="rounded-md p-1.5 hover:bg-gray-100"><i data-lucide="copy" class="h-3.5 w-3.5"></i></button>
+                    <button title="点赞" class="rounded-md p-1.5 hover:bg-gray-100"><i data-lucide="thumbs-up" class="h-3.5 w-3.5"></i></button>
+                    <button title="点踩" class="rounded-md p-1.5 hover:bg-gray-100"><i data-lucide="thumbs-down" class="h-3.5 w-3.5"></i></button>
+                    <button @click="retryMessage(message)" title="重新生成" class="rounded-md p-1.5 hover:bg-gray-100"><i data-lucide="refresh-cw" class="h-3.5 w-3.5"></i></button>
+                    <span v-if="message.usage" class="ml-2 text-[11px]">{{ message.usage }} tokens</span>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="activeTopic.messages.length && !generating" class="h-4"></div>
+            </div>
+          </div>
+
+          <button v-if="showToBottom" @click="scrollBottom"
+            class="absolute bottom-32 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full border border-line bg-white px-3 py-2 text-xs font-medium text-muted shadow-panel hover:text-brand">
+            <i data-lucide="arrow-down" class="h-3.5 w-3.5"></i>
+            回到底部
+          </button>
+
+          <!-- Composer -->
+          <div class="composer absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent px-4 pb-5 pt-10">
+            <div class="mx-auto max-w-[820px]">
+              <div v-if="attachments.length" class="mb-2 flex gap-2">
+                <div v-for="file in attachments" class="flex items-center gap-2 rounded-lg border border-line bg-white px-3 py-2 text-xs shadow-sm">
+                  <i data-lucide="file-text" class="h-4 w-4 text-brand"></i>
+                  {{ file }}
+                  <button @click="attachments = []" title="移除附件"><i data-lucide="x" class="h-3.5 w-3.5 text-muted"></i></button>
+                </div>
+              </div>
+
+              <div class="rounded-2xl border border-line bg-white p-2 shadow-panel focus-within:border-brand focus-within:ring-4 focus-within:ring-indigo-50">
+                <textarea v-model="draft" @keydown.enter.exact.prevent="send"
+                  :disabled="generating"
+                  rows="2"
+                  placeholder="输入消息，按 Enter 发送 · Shift + Enter 换行"
+                  class="w-full resize-none border-0 bg-transparent px-3 py-2 text-sm outline-none placeholder:text-faint disabled:opacity-50"></textarea>
+                <div class="flex items-center justify-between px-2 pb-1">
+                  <div class="flex items-center gap-1">
+                    <button @click="attachments = ['research-notes.txt']" title="添加附件" class="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-gray-100 hover:text-brand">
+                      <i data-lucide="paperclip" class="h-4 w-4"></i>
+                    </button>
+                    <button title="预估 Token" class="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-gray-100 hover:text-brand">
+                      <i data-lucide="calculator" class="h-4 w-4"></i>
+                    </button>
+                    <span class="ml-2 text-xs text-muted">GPT-4o</span>
+                  </div>
+                  <button v-if="generating" @click="stopGeneration"
+                    class="flex h-8 items-center gap-2 rounded-lg bg-gray-900 px-3 text-xs font-medium text-white hover:bg-gray-700">
+                    <i data-lucide="square" class="h-3 w-3 fill-current"></i>停止
+                  </button>
+                  <button v-else @click="send" :disabled="!draft.trim()"
+                    class="flex h-8 items-center gap-2 rounded-lg bg-brand px-3 text-xs font-medium text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40">
+                    发送 <i data-lucide="arrow-up" class="h-3.5 w-3.5"></i>
+                  </button>
+                </div>
+              </div>
+              <p class="mt-2 text-center text-[11px] text-faint">Orbit Chat 可能生成不准确内容，请核验重要信息</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- 检查器 -->
+        <aside v-if="inspectorOpen" class="inspector w-[304px] shrink-0 border-l border-line bg-panel">
+          <div class="flex h-[60px] items-center justify-between border-b border-line px-4">
+            <span class="text-sm font-semibold">检查器</span>
+            <button @click="inspectorOpen = false" title="关闭检查器" class="text-muted hover:text-ink">
+              <i data-lucide="x" class="h-4 w-4"></i>
+            </button>
+          </div>
+          <div class="border-b border-line p-4">
+            <div class="mb-3 flex gap-1 rounded-lg bg-gray-200/70 p-1">
+              <button class="flex-1 rounded-md bg-white py-1.5 text-xs font-medium shadow-sm">消息大纲</button>
+              <button class="flex-1 py-1.5 text-xs text-muted">元信息</button>
+            </div>
+            <div class="space-y-3 text-xs text-muted">
+              <div class="flex justify-between"><span>消息数量</span><b class="text-ink">{{ activeTopic.messages.length }}</b></div>
+              <div class="flex justify-between"><span>上下文窗口</span><b class="text-ink">128K</b></div>
+              <div class="flex justify-between"><span>当前模型</span><b class="text-ink">GPT-4o</b></div>
+            </div>
+          </div>
+          <div class="p-4">
+            <div class="mb-3 text-xs font-semibold text-ink">当前 Assistant</div>
+            <div class="rounded-xl border border-line bg-white p-3">
+              <div class="flex items-center gap-2">
+                <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-soft text-brand">
+                  <i data-lucide="sparkles" class="h-4 w-4"></i>
+                </div>
+                <div>
+                  <div class="text-sm font-medium">Orbit Assistant</div>
+                  <div class="text-xs text-muted">通用对话助手</div>
+                </div>
+              </div>
+              <p class="mt-3 text-xs leading-5 text-muted">帮助用户分析问题、整理信息并生成清晰可执行的方案。</p>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </template>
+
+    <!-- 搜索视图 -->
+    <template v-else-if="view === 'search'">
+      <header class="flex h-[60px] shrink-0 items-center border-b border-line px-6">
+        <div class="flex items-center gap-3">
+          <button @click="sidebarOpen = !sidebarOpen" title="打开侧栏" class="mobile-only h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-gray-100">
+            <i data-lucide="menu" class="h-5 w-5"></i>
+          </button>
+          <h1 class="text-lg font-semibold">搜索历史</h1>
+        </div>
+      </header>
+
+      <section class="scrollbar flex-1 overflow-y-auto bg-panel px-5 py-8">
+        <div class="mx-auto max-w-[900px]">
+          <div class="mb-6 flex flex-col gap-3 sm:flex-row">
+            <div class="relative flex-1">
+              <i data-lucide="search" class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"></i>
+              <input v-model="searchQuery" autofocus placeholder="搜索话题和消息内容..."
+                class="h-11 w-full rounded-xl border border-line bg-white pl-10 pr-4 text-sm outline-none focus:border-brand focus:ring-4 focus:ring-indigo-50" />
+            </div>
+            <select class="h-11 rounded-xl border border-line bg-white px-4 text-sm outline-none">
+              <option>全部助手</option>
+              <option>Orbit Assistant</option>
+            </select>
+          </div>
+
+          <div class="mb-4 text-xs text-muted">
+            {{ searchQuery ? `找到 ${filteredTopics.length} 个相关话题` : '最近话题' }}
+          </div>
+
+          <div v-if="filteredTopics.length" class="space-y-3">
+            <button v-for="topic in filteredTopics" @click="openSearchResult(topic)"
+              class="group w-full rounded-2xl border border-line bg-white p-4 text-left shadow-panel transition hover:border-brand hover:shadow-md">
+              <div class="mb-2 flex items-center gap-2">
+                <i data-lucide="message-square" class="h-4 w-4 text-brand"></i>
+                <span class="font-medium">{{ topic.title }}</span>
+                <span class="ml-auto text-xs text-muted">刚刚</span>
+              </div>
+              <p class="line-clamp-2 text-sm leading-6 text-muted">
+                {{ topic.messages[0]?.text || '暂无消息，点击进入话题开始对话' }}
+              </p>
+              <div class="mt-3 flex items-center gap-2 text-xs text-muted">
+                <span class="rounded-md bg-brand-soft px-2 py-1 text-brand">Orbit Assistant</span>
+                <span>{{ topic.messages.length }} 条消息</span>
+                <span class="ml-auto opacity-0 transition group-hover:opacity-100">打开话题 →</span>
+              </div>
+            </button>
+          </div>
+
+          <div v-else class="rounded-2xl border border-dashed border-line bg-white py-20 text-center">
+            <i data-lucide="search-x" class="mx-auto mb-3 h-9 w-9 text-slate-300"></i>
+            <div class="font-medium">没有找到相关内容</div>
+            <p class="mt-1 text-sm text-muted">尝试使用其他关键词</p>
+          </div>
+        </div>
+      </section>
+    </template>
+
+    <!-- 设置视图 -->
+    <template v-else>
+      <header class="flex h-[60px] shrink-0 items-center border-b border-line px-6">
+        <button @click="sidebarOpen = !sidebarOpen" title="打开侧栏" class="mobile-only mr-3 h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-gray-100">
+          <i data-lucide="menu" class="h-5 w-5"></i>
+        </button>
+        <h1 class="text-lg font-semibold">设置</h1>
+      </header>
+
+      <section class="scrollbar flex-1 overflow-y-auto bg-panel px-5 py-8">
+        <div class="mx-auto grid max-w-[980px] gap-6 md:grid-cols-[210px_1fr]">
+          <nav class="hidden space-y-1 md:block">
+            <div class="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-muted">偏好设置</div>
+            <button v-for="item in settingItems"
+              :class="settingTab === item.id ? 'bg-brand-soft font-medium text-brand' : 'text-muted hover:bg-white'"
+              @click="settingTab = item.id"
+              class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm">
+              <i :data-lucide="item.icon" class="h-4 w-4"></i>{{ item.label }}
+            </button>
+          </nav>
+
+          <div class="space-y-5">
+            <div class="md:hidden">
+              <select v-model="settingTab" class="h-10 w-full rounded-xl border border-line bg-white px-3 text-sm">
+                <option v-for="item in settingItems" :value="item.id">{{ item.label }}</option>
+              </select>
+            </div>
+
+            <div v-if="settingTab === 'provider'" class="space-y-5">
+              <div>
+                <h2 class="text-xl font-semibold">Provider 与模型</h2>
+                <p class="mt-1 text-sm text-muted">管理 API 连接和可用模型。</p>
+              </div>
+              <div class="rounded-2xl border border-line bg-white p-5 shadow-panel">
+                <div class="mb-4 flex items-center justify-between">
+                  <div>
+                    <div class="font-medium">OpenAI</div>
+                    <div class="mt-1 text-xs text-muted">openai-compatible · api.openai.com</div>
+                  </div>
+                  <span class="flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs text-emerald-700">
+                    <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>已就绪
+                  </span>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <label class="text-xs text-muted">API Base URL<input value="https://api.openai.com/v1" class="mt-1.5 h-10 w-full rounded-lg border border-line px-3 text-sm outline-none focus:border-brand" /></label>
+                  <label class="text-xs text-muted">API Key<input value="sk-••••••••••••••••" type="password" class="mt-1.5 h-10 w-full rounded-lg border border-line px-3 text-sm outline-none focus:border-brand" /></label>
+                </div>
+                <div class="mt-4 flex justify-end">
+                  <button @click="toast = '连接测试成功 · 延迟 238ms'" class="rounded-lg border border-line px-3 py-2 text-xs font-medium hover:bg-gray-50">测试连接</button>
+                </div>
+              </div>
+              <div class="rounded-2xl border border-line bg-white p-5 shadow-panel">
+                <div class="mb-4 flex items-center justify-between">
+                  <div><div class="font-medium">已启用模型</div><div class="mt-1 text-xs text-muted">模型参数归属于 Assistant</div></div>
+                  <button class="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white hover:bg-brand-hover">添加模型</button>
+                </div>
+                <div class="divide-y divide-line">
+                  <div class="flex items-center justify-between py-3">
+                    <div><div class="text-sm font-medium">GPT-4o</div><div class="text-xs text-muted">OpenAI · 128K context</div></div>
+                    <span class="rounded-full bg-emerald-50 px-2 py-1 text-xs text-emerald-700">启用</span>
+                  </div>
+                  <div class="flex items-center justify-between py-3">
+                    <div><div class="text-sm font-medium">GPT-4o-mini</div><div class="text-xs text-muted">OpenAI · 128K context</div></div>
+                    <span class="rounded-full bg-gray-100 px-2 py-1 text-xs text-muted">未启用</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="settingTab === 'sync'" class="space-y-5">
+              <div><h2 class="text-xl font-semibold">同步与存储</h2><p class="mt-1 text-sm text-muted">备份即 Cherry Studio 可导入的 JSON 格式。</p></div>
+              <div class="rounded-2xl border border-line bg-white p-5 shadow-panel">
+                <div class="mb-5 flex items-center justify-between"><div><div class="font-medium">同步方式</div><div class="mt-1 text-xs text-muted">当前使用本地 IndexedDB</div></div><span class="rounded-full bg-gray-100 px-2.5 py-1 text-xs text-muted">未配置远端</span></div>
+                <div class="grid gap-3 sm:grid-cols-2">
+                  <button class="rounded-xl border-2 border-brand bg-brand-soft p-4 text-left"><div class="font-medium text-brand">本地存储</div><div class="mt-1 text-xs text-muted">浏览器 IndexedDB</div></button>
+                  <button class="rounded-xl border border-line p-4 text-left hover:border-brand"><div class="font-medium">S3 / WebDAV</div><div class="mt-1 text-xs text-muted">配置远端备份</div></button>
+                </div>
+                <div class="mt-5 flex flex-wrap gap-2">
+                  <button class="rounded-lg bg-brand px-3 py-2 text-xs font-medium text-white">全量上传</button>
+                  <button class="rounded-lg border border-line px-3 py-2 text-xs font-medium">全量下载</button>
+                  <button class="rounded-lg border border-line px-3 py-2 text-xs font-medium">导出 Cherry JSON</button>
+                </div>
+              </div>
+              <div class="rounded-2xl border border-red-200 bg-red-50 p-5">
+                <div class="font-medium text-red-800">危险区域</div>
+                <p class="mt-1 text-xs leading-5 text-red-700">清空本地数据不可撤销。建议先导出备份。</p>
+                <button @click="confirmClear" class="mt-4 rounded-lg border border-red-300 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-100">清空本地数据</button>
+              </div>
+            </div>
+
+            <div v-else class="space-y-5">
+              <div><h2 class="text-xl font-semibold">{{ settingItems.find(x => x.id === settingTab)?.label }}</h2><p class="mt-1 text-sm text-muted">设置会即时保存在本地。</p></div>
+              <div class="rounded-2xl border border-line bg-white p-5 shadow-panel">
+                <div v-for="row in genericSettings[settingTab]" class="flex items-center justify-between border-b border-line py-4 last:border-0">
+                  <div><div class="text-sm font-medium">{{ row.title }}</div><div class="mt-1 text-xs text-muted">{{ row.desc }}</div></div>
+                  <button @click="row.enabled = !row.enabled" :class="row.enabled ? 'bg-brand' : 'bg-gray-200'" class="relative h-6 w-11 rounded-full transition"><span :class="row.enabled ? 'translate-x-6' : 'translate-x-1'" class="absolute top-1 h-4 w-4 rounded-full bg-white transition"></span></button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </template>
+  </main>
+
+  <!-- 移动底部导航 -->
+  <nav class="mobile-nav fixed bottom-0 left-0 right-0 z-50 hidden h-[58px] items-center justify-around border-t border-line bg-white">
+    <button v-for="item in navItems" @click="view = item.id" :class="view === item.id ? 'text-brand' : 'text-muted'" class="flex flex-col items-center gap-1 text-[10px]">
+      <i :data-lucide="item.icon" class="h-[18px] w-[18px]"></i>{{ item.label }}
+    </button>
+  </nav>
+
+  <!-- Toast -->
+  <div v-if="toast" class="fixed bottom-6 right-6 z-[100] flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-3 text-sm text-white shadow-modal">
+    <i data-lucide="check-circle-2" class="h-4 w-4 text-emerald-400"></i>{{ toast }}
+  </div>
+
+  <!-- 确认弹窗 -->
+  <div v-if="confirming" class="fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/30 p-5">
+    <div class="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-modal">
+      <div class="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-red-600"><i data-lucide="triangle-alert" class="h-5 w-5"></i></div>
+      <h3 class="text-lg font-semibold">清空本地数据？</h3>
+      <p class="mt-2 text-sm leading-6 text-muted">此操作不可撤销。请先导出 Cherry JSON 备份。</p>
+      <div class="mt-6 flex justify-end gap-2">
+        <button @click="confirming = false" class="rounded-lg border border-line px-4 py-2 text-sm">取消</button>
+        <button @click="clearData" class="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white">确认清空</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, nextTick } = Vue;
+
+createApp({
+  data() {
+    return {
+      view: 'chat',
+      dark: false,
+      mobile: window.innerWidth <= 759,
+      sidebarOpen: false,
+      inspectorOpen: true,
+      offline: false,
+      generating: false,
+      showToBottom: false,
+      draft: '',
+      toast: '',
+      confirming: false,
+      searchQuery: '',
+      settingTab: 'provider',
+      attachments: [],
+      navItems: [
+        { id: 'chat', label: '对话', icon: 'message-circle' },
+        { id: 'search', label: '搜索', icon: 'search' },
+        { id: 'settings', label: '设置', icon: 'settings' }
+      ],
+      settingItems: [
+        { id: 'appearance', label: '外观', icon: 'palette' },
+        { id: 'input', label: '输入', icon: 'keyboard' },
+        { id: 'provider', label: 'Provider 与模型', icon: 'plug' },
+        { id: 'assistant', label: '助手', icon: 'sparkles' },
+        { id: 'context', label: '上下文', icon: 'layers-3' },
+        { id: 'sync', label: '同步与存储', icon: 'cloud' },
+        { id: 'data', label: '数据管理', icon: 'database' }
+      ],
+      prompts: [
+        { icon: 'file-text', title: '整理一份文档', text: '把零散内容整理成清晰的结构和行动计划' },
+        { icon: 'lightbulb', title: '头脑风暴', text: '围绕一个目标生成多个可执行的想法' },
+        { icon: 'code-2', title: '解释代码', text: '逐步解释代码逻辑，并指出潜在问题' },
+        { icon: 'languages', title: '翻译文本', text: '保持原意和语气，翻译成自然的中文' }
+      ],
+      topics: [
+        {
+          id: 1, title: 'Orbit Chat 产品规划', pinned: true,
+          messages: [
+            { id: 1, role: 'user', text: '帮我梳理 Orbit Chat 的核心产品方向', html: '帮我梳理 Orbit Chat 的核心产品方向' },
+            { id: 2, role: 'assistant', status: 'complete', usage: 438,
+              thinking: '我会先提炼产品定位，再按照用户任务拆分核心模块。',
+              html: '<p>Orbit Chat 的核心方向可以归纳为三个部分：</p><p><strong>1. 本地优先的多模型对话</strong><br>让用户自由配置 OpenAI 兼容、Anthropic 和 Ollama，不依赖服务端账户。</p><p><strong>2. 可迁移的对话资产</strong><br>通过 Assistant、Topic 和全文搜索，降低历史信息的查找成本。</p><p><strong>3. 用户完全掌控数据</strong><br>使用 IndexedDB 保存数据，并通过 S3、WebDAV 或 Cherry JSON 完成备份与迁移。</p><pre>本地 IndexedDB → Cherry JSON → S3 / WebDAV</pre>' }
+          ]
+        },
+        { id: 2, title: '设计系统与颜色令牌', pinned: true, messages: [{ id: 3, role: 'user', text: '设计一套浅色 UI 颜色令牌', html: '设计一套浅色 UI 颜色令牌' }] },
+        { id: 3, title: '旅行计划整理', pinned: false, messages: [{ id: 4, role: 'user', text: '帮我整理一个周末旅行计划', html: '帮我整理一个周末旅行计划' }] },
+        { id: 4, title: 'Vue 组件选型', pinned: false, messages: [{ id: 5, role: 'user', text: '比较 BubbleList 和普通列表的实现方式', html: '比较 BubbleList 和普通列表的实现方式' }] }
+      ],
+      genericSettings: {
+        appearance: [
+          { title: '跟随系统主题', desc: '自动切换浅色和深色模式', enabled: true },
+          { title: '显示消息分隔线', desc: '在连续消息之间显示细分隔线', enabled: false },
+          { title: '代码块显示行号', desc: '为代码内容增加行号', enabled: true }
+        ],
+        input: [
+          { title: 'Enter 发送消息', desc: '使用 Shift + Enter 换行', enabled: true },
+          { title: '自动滚动到底部', desc: '生成过程中自动跟随最新消息', enabled: true },
+          { title: '粘贴长文本转附件', desc: '超过阈值的文本自动转换为文件附件', enabled: true }
+        ],
+        assistant: [
+          { title: '首条消息自动命名话题', desc: '根据首条用户消息生成不超过 30 字的标题', enabled: true },
+          { title: '显示模型参数', desc: '在检查器中显示当前 Assistant 参数', enabled: true }
+        ],
+        context: [
+          { title: '注入话题标题', desc: '将当前话题标题加入上下文', enabled: true },
+          { title: '注入附件内容', desc: '将附件文本加入 Prompt', enabled: true },
+          { title: '发送历史消息', desc: '根据上下文窗口自动选择历史消息', enabled: true }
+        ],
+        data: [
+          { title: '导出时剔除 API Key', desc: '导出的 Cherry JSON 不包含任何密钥', enabled: true },
+          { title: '导入后重建搜索索引', desc: '导入完成后自动重建 MiniSearch 索引', enabled: true }
+        ]
+      }
+    }
+  },
+  computed: {
+    activeTopic() {
+      return this.topics[0] || { id: 0, title: '新对话', messages: [] };
+    },
+    filteredTopics() {
+      const q = this.searchQuery.trim().toLowerCase();
+      if (!q) return [...this.topics].sort((a, b) => b.id - a.id);
+      return this.topics.filter(topic =>
+        topic.title.toLowerCase().includes(q) ||
+        topic.messages.some(message => message.text?.toLowerCase().includes(q))
+      );
+    }
+  },
+  mounted() {
+    this.refreshIcons();
+    window.addEventListener('resize', () => this.mobile = window.innerWidth <= 759);
+    setTimeout(() => this.toast = '', 3000);
+  },
+  updated() {
+    this.refreshIcons();
+  },
+  methods: {
+    refreshIcons() {
+      nextTick(() => window.lucide?.createIcons());
+    },
+    selectTopic(topic) {
+      this.topics = [topic, ...this.topics.filter(x => x.id !== topic.id)];
+      this.view = 'chat';
+      this.sidebarOpen = false;
+      this.scrollBottom();
+    },
+    openSearchResult(topic) {
+      this.selectTopic(topic);
+      this.toast = '已打开话题';
+      setTimeout(() => this.toast = '', 2500);
+    },
+    createTopic() {
+      const topic = {
+        id: Date.now(),
+        title: '新对话',
+        pinned: false,
+        messages: []
+      };
+      this.topics.unshift(topic);
+      this.draft = '';
+      this.view = 'chat';
+      this.sidebarOpen = false;
+      this.toast = '已创建新话题';
+      setTimeout(() => this.toast = '', 2500);
+    },
+    send() {
+      if (!this.draft.trim() || this.generating) return;
+      const text = this.draft.trim();
+      const topic = this.activeTopic;
+      topic.messages.push({
+        id: Date.now(),
+        role: 'user',
+        text,
+        html: text.replace(/\n/g, '<br>')
+      });
+      this.draft = '';
+      this.attachments = [];
+      this.generating = true;
+
+      setTimeout(() => {
+        topic.messages.push({
+          id: Date.now(),
+          role: 'assistant',
+          status: 'streaming',
+          html: '<p>我正在整理你的请求，请稍候…</p>'
+        });
+        this.scrollBottom();
+
+        setTimeout(() => {
+          const last = topic.messages[topic.messages.length - 1];
+          last.status = 'complete';
+          last.usage = 126;
+          last.html = '<p>这是一个可交互的 Orbit Chat 原型。你可以继续发送消息、切换搜索和设置视图，并在移动端查看响应式布局。</p><p>下一步可以接入真实的 IndexedDB、Provider 适配器和流式响应。</p>';
+          this.generating = false;
+          this.scrollBottom();
+        }, 1000);
+      }, 500);
+    },
+    stopGeneration() {
+      this.generating = false;
+      const last = this.activeTopic.messages[this.activeTopic.messages.length - 1];
+      if (last?.status === 'streaming') last.status = 'stopped';
+      this.toast = '生成已停止，已保留已接收内容';
+      setTimeout(() => this.toast = '', 2500);
+    },
+    retryMessage() {
+      this.draft = '请重新生成上一条回答';
+      this.send();
+    },
+    scrollBottom() {
+      nextTick(() => {
+        const area = this.$refs.messageArea;
+        if (area) area.scrollTop = area.scrollHeight;
+      });
+    },
+    toggleTheme() {
+      this.dark = !this.dark;
+      this.toast = this.dark ? '深色模式预览暂未接入' : '已切换为浅色模式';
+      setTimeout(() => this.toast = '', 2500);
+    },
+    confirmClear() {
+      this.confirming = true;
+    },
+    clearData() {
+      this.confirming = false;
+      this.toast = '原型模式：未执行真实删除';
+      setTimeout(() => this.toast = '', 2500);
+    }
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
