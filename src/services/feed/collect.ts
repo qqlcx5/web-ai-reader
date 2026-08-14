@@ -1,0 +1,145 @@
+import dayjs from 'dayjs'
+import { extractFromHtml } from '@/utils/content/extract'
+import type { ExtractedPageData } from '@/utils/content/extract'
+import { requestExtractByUrl } from '@/services/capture/capture.service'
+import { DocumentRepository } from '@/db/repositories/document.repository'
+import { FeedItemRepository } from '@/db/repositories/feed-item.repository'
+import { addToIndex } from '@/services/search'
+import { enqueueForDocument } from '@/services/ai-job/queue'
+import type { FeedItemEntity } from '@/types/feed'
+import type { DocumentEntity } from '@/types/document'
+
+const AUTO_COLLECT_CAP = 10
+
+/** Minimum body length (words) for the RSS body to be trusted as the full
+ *  article. Below this it's likely a truncated teaser → fetch the real page. */
+const RSS_MIN_WORDS = 40
+
+/** Auto-collected docs must clear this word count or they're skipped. A short
+ *  result usually means the feed only carried a teaser and the article page was
+ *  paywalled / bot-blocked, so saving would shelve a truncated article in the
+ *  library. Manual collects are exempt — the user explicitly asked. */
+const AUTO_COLLECT_MIN_WORDS = 500
+
+/**
+ * Collect a feed item into the knowledge base as a DocumentEntity, linked back
+ * to the item via documentId. Content resolution prefers the body the feed
+ * already carries (contentHtml → Markdown); only when that's missing or just a
+ * teaser do we fetch the original page and extract with defuddle — re-fetching
+ * is fragile (paywalls, bot-blocks, JS-rendered shells) and the feed body is
+ * usually the reliable copy. The summary is a last resort so we never persist
+ * an empty document.
+ */
+export async function collectFeedItem(
+  item: FeedItemEntity,
+  origin: 'manual' | 'auto' = 'manual',
+): Promise<DocumentEntity> {
+  const data = await extractItemContent(item)
+  if (!data) throw new Error('无法获取该条目的正文')
+
+  // Auto-collect quality gate: skip short bodies (likely a teaser-only feed
+  // whose article page got paywalled / bot-blocked) instead of shelving a
+  // truncated article in the library. The item stays a plain feed item; the
+  // user can still collect it manually. Manual collects bypass this.
+  if (origin === 'auto' && data.wordCount < AUTO_COLLECT_MIN_WORDS) {
+    throw new Error(`正文过短（${data.wordCount} 词），疑似未完整抓取`)
+  }
+
+  const now = dayjs().toISOString()
+  const entity: DocumentEntity = {
+    id: data.contentHash,
+    url: data.url || item.link,
+    canonicalUrl: data.canonicalUrl,
+    title: data.title || item.title,
+    siteName: data.siteName,
+    author: data.author || item.author,
+    description: data.description,
+    publishedAt: data.publishedAt || item.publishedAt,
+    markdown: data.markdown,
+    wordCount: data.wordCount,
+    tokenCount: data.tokenCount,
+    contentHash: data.contentHash,
+    extractionMethod: data.extractionMethod,
+    source: 'library',
+    feedOrigin: origin,
+    capturedAt: now,
+    updatedAt: now,
+  }
+
+  // save() may merge this into an existing doc (same URL / canonicalUrl) and
+  // return a different id. Use the persisted id everywhere downstream so the
+  // feed item links to the document that's actually in the library — otherwise
+  // the item looks collected but its documentId points at a row that was never
+  // written, and the article can't be found/opened from the library.
+  const saved = await DocumentRepository.save(entity)
+  await FeedItemRepository.setDocument(item.id, saved.id, now)
+  try {
+    addToIndex(saved)
+  } catch {
+    // search index is best-effort
+  }
+  return saved
+}
+
+/** Resolve an item's article content. RSS body first (no network), then the
+ *  fetched original page, then the feed summary. Returns null only when every
+ *  source is empty/unavailable. */
+async function extractItemContent(item: FeedItemEntity): Promise<ExtractedPageData | null> {
+  const meta = { title: item.title, author: item.author, publishedAt: item.publishedAt }
+
+  // 1. RSS full body (content:encoded / atom content).
+  if (item.contentHtml) {
+    const d = await extractFromHtml(item.contentHtml, item.link, meta)
+    if (d.wordCount >= RSS_MIN_WORDS) return d
+  }
+
+  // 2. Fetch the original article via the proxy (server-side defuddle).
+  //    Browser-side fetch would hit CORS / bot-blocks; the proxy bypasses both.
+  if (item.link) {
+    try {
+      const d = await requestExtractByUrl(item.link)
+      if (d && d.wordCount > 0) return d
+    } catch {
+      // proxy fetch failed → fall through to the summary
+    }
+  }
+
+  // 3. Last resort: the feed summary blurb.
+  if (item.summary) {
+    const d = await extractFromHtml(item.summary, item.link, meta)
+    if (d.wordCount > 0) return d
+  }
+
+  return null
+}
+
+/**
+ * Collect a batch of items sequentially, best-effort. Used by auto-collect:
+ * skips already-collected items, caps at AUTO_COLLECT_CAP per run so a burst of
+ * new items can't flood the network, and leaves failures as plain feed items.
+ */
+export async function collectItems(
+  items: FeedItemEntity[],
+  origin: 'manual' | 'auto',
+): Promise<number> {
+  let collected = 0
+  for (const item of items) {
+    if (item.documentId) continue
+    if (collected >= AUTO_COLLECT_CAP) break
+    try {
+      const entity = await collectFeedItem(item, origin)
+      collected++
+      // Auto-collected docs feed the AI analysis pipeline (opt-in via settings).
+      if (origin === 'auto') {
+        try {
+          await enqueueForDocument(entity.id)
+        } catch {
+          // queue is best-effort — don't fail the collect
+        }
+      }
+    } catch {
+      // leave as a plain feed item; user can collect manually later
+    }
+  }
+  return collected
+}

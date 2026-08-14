@@ -1,14 +1,7 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+// 顶级路由出口；AppShell 由路由（'/' 父路由）提供，保证 Rail/Sidebar 持久。
+</script>
 
 <template>
-  <div>
-    <div class="flex gap-4">
-      <RouterLink to="/">DEMO</RouterLink>
-      <RouterLink to="/ErpProTable">ErpProTable</RouterLink>
-      <RouterLink to="/ModernProTable">ModernProTable</RouterLink>
-    </div>
-    <RouterView />
-  </div>
+  <RouterView />
 </template>
-
-<style scoped lang="scss"></style>

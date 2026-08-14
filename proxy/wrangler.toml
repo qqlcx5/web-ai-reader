@@ -1,0 +1,6 @@
+name = "auramind-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-01-15"
+compatibility_flags = ["nodejs_compat"]
+
+# 部署后地址填入 Web 版「设置 → 代理服务地址」

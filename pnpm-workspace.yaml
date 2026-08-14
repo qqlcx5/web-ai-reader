@@ -1,17 +1,24 @@
+packages:
+  - '.'
+  - 'proxy'
+
+allowBuilds:
+  '@parcel/watcher': true
+  esbuild: true
+  vue-demi: true
+  workerd: true
+
 overrides:
-  'vue': 'rc'
-  '@vue/compiler-core': 'rc'
-  '@vue/compiler-dom': 'rc'
-  '@vue/compiler-sfc': 'rc'
-  '@vue/compiler-ssr': 'rc'
-  '@vue/compiler-vapor': 'rc'
-  '@vue/reactivity': 'rc'
-  '@vue/runtime-core': 'rc'
-  '@vue/runtime-dom': 'rc'
-  '@vue/runtime-vapor': 'rc'
-  '@vue/server-renderer': 'rc'
-  '@vue/shared': 'rc'
-  '@vue/compat': 'rc'
+  'vue': '3.5.40'
+  '@vue/compiler-core': '3.5.40'
+  '@vue/compiler-dom': '3.5.40'
+  '@vue/compiler-sfc': '3.5.40'
+  '@vue/compiler-ssr': '3.5.40'
+  '@vue/reactivity': '3.5.40'
+  '@vue/runtime-core': '3.5.40'
+  '@vue/runtime-dom': '3.5.40'
+  '@vue/server-renderer': '3.5.40'
+  '@vue/shared': '3.5.40'
 
 peerDependencyRules:
   allowAny:

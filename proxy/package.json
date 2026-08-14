@@ -1,0 +1,22 @@
+{
+  "name": "auramind-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "defuddle": "^0.19.0",
+    "linkedom": "^0.18.12",
+    "turndown": "^7.2.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250810.0",
+    "@types/turndown": "^5.0.6",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}
