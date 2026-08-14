@@ -403,8 +403,15 @@ export const useFeedStore = defineStore('feed', () => {
   }
 
   async function subscribe(url: string, folder?: string) {
-    await addSubscription(url, folder)
+    const feed = await addSubscription(url, folder)
     await loadFeeds()
+    // Auto-select the newly subscribed feed so its items show immediately.
+    await selectFeed(feed.id)
+    // addSubscription calls refreshFeed internally, which catches fetch errors
+    // and stores them on feed.lastError instead of throwing. Surface that so
+    // the user isn't left with a feed that silently has zero items.
+    const fresh = feeds.value.find((f) => f.id === feed.id)
+    if (fresh?.lastError) throw new Error(fresh.lastError)
   }
 
   async function unsubscribe(id: string) {

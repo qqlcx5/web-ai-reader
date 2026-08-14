@@ -67,6 +67,13 @@ const selectedItem = computed(
   () => feedStore.items.find((i) => i.id === selectedItemId.value) ?? null,
 )
 
+/** The currently selected feed entity (null when "全部" is selected). */
+const selectedFeed = computed(() =>
+  feedStore.selectedFeedId
+    ? feedStore.feeds.find((f) => f.id === feedStore.selectedFeedId) ?? null
+    : null,
+)
+
 const readerRef = ref<HTMLElement | null>(null)
 
 const safeContent = computed(() => {
@@ -158,8 +165,9 @@ async function onSubscribe() {
     await feedStore.subscribe(url, newFolder.value.trim() || undefined)
     newUrl.value = ''
     toast.success('已订阅', { category: 'rss' })
-  } catch {
-    toast.error('订阅失败', { category: 'rss' })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '订阅失败'
+    toast.error(`订阅失败：${msg}`, { category: 'rss' })
   }
 }
 
@@ -624,6 +632,13 @@ onUnmounted(() => {
             >
               <Globe class="w-3 h-3 shrink-0 opacity-60" />
               <span class="truncate flex-1">{{ f.title }}</span>
+              <!-- fetch error indicator: feed exists but has zero items because
+                   the last refresh failed (HTTP error, parse error, etc.) -->
+              <span
+                v-if="f.lastError"
+                class="w-1.5 h-1.5 rounded-full bg-red-400 shrink-0"
+                :title="`刷新失败：${f.lastError}`"
+              ></span>
               <!-- auto-collect status badge -->
               <template v-if="f.autoCollect">
                 <span v-if="feedStore.collectStatusOf(f.id).phase === 'collecting'"
@@ -731,8 +746,14 @@ onUnmounted(() => {
           <span v-if="it.publishedAt">· {{ displayDate(it.publishedAt) }}</span>
         </div>
       </button>
-      <div v-if="!feedStore.items.length" class="text-center text-[12px] text-zinc-400 py-8">
-        {{ feedStore.feeds.length ? '选中订阅源后刷新' : '先添加订阅源' }}
+      <div v-if="!feedStore.items.length" class="text-center text-[12px] text-zinc-400 py-8 px-3">
+        <template v-if="!feedStore.feeds.length">先添加订阅源</template>
+        <template v-else-if="selectedFeed && selectedFeed.lastError">
+          <div class="text-red-400 mb-1">刷新失败</div>
+          <div class="text-[10px] text-zinc-400 leading-relaxed">{{ selectedFeed.lastError }}</div>
+        </template>
+        <template v-else-if="selectedFeed">暂无文章，点击上方刷新按钮拉取</template>
+        <template v-else>选中订阅源后查看文章</template>
       </div>
     </section>
 

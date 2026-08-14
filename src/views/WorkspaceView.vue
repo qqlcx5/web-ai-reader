@@ -28,36 +28,10 @@ const currentModelName = computed(() => {
 </script>
 
 <template>
-  <!-- 工作区为自包含三栏（Rail 由外壳提供，这里渲染：会话列 + 对话主区 + 检查器）。
-       外壳对该视图关闭独立 sidebar，避免重复面板。 -->
+  <!-- 工作区为两栏：主区（会话横条 + 聊天）+ 检查器（可选）。
+       ConversationList 是水平横条设计，放在主区顶部，适配宽屏和窄屏。 -->
   <div class="flex min-h-0 flex-1">
-    <!-- 会话列（可调宽度） -->
-    <aside
-      class="relative hidden shrink-0 flex-col border-r border-line bg-white md:flex"
-      :style="{ width: uiStore.convListWidth + 'px' }"
-    >
-      <div
-        class="flex h-[60px] shrink-0 items-center gap-2 border-b border-line px-4"
-      >
-        <div
-          class="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-soft text-brand"
-        >
-          <PanelRight class="h-4 w-4" />
-        </div>
-        <span class="text-sm font-semibold text-ink">对话</span>
-      </div>
-      <div class="scrollbar min-h-0 flex-1 overflow-y-auto">
-        <ConversationList />
-      </div>
-      <!-- 右边缘拖拽把手 -->
-      <ResizeHandle
-        class="absolute inset-y-0 right-0"
-        side="right"
-        @resize="uiStore.setConvListWidth(uiStore.convListWidth + $event)"
-      />
-    </aside>
-
-    <!-- 对话主区 -->
+    <!-- 主区 -->
     <div class="flex min-h-0 min-w-0 flex-1 flex-col">
       <header
         class="flex h-[60px] shrink-0 items-center justify-between border-b border-line px-5"
@@ -88,6 +62,9 @@ const currentModelName = computed(() => {
         </div>
       </header>
 
+      <!-- 水平会话横条（ConversationList 是 flex-row 横向滚动设计） -->
+      <ConversationList />
+
       <div class="relative flex min-h-0 flex-1 flex-col">
         <!-- 空状态 -->
         <div
@@ -112,10 +89,10 @@ const currentModelName = computed(() => {
       </div>
     </div>
 
-    <!-- 检查器（可调宽度，≤1179px 隐藏；由 uiStore.inspectorOpen 控制） -->
+    <!-- 检查器（可调宽度，≤1023px 隐藏；由 uiStore.inspectorOpen 控制） -->
     <aside
       v-if="uiStore.inspectorOpen"
-      class="relative hidden shrink-0 flex-col border-l border-line bg-panel xl:flex"
+      class="relative hidden shrink-0 flex-col border-l border-line bg-panel lg:flex"
       :style="{ width: uiStore.inspectorWidth + 'px' }"
     >
       <div
