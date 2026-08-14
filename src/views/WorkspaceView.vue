@@ -9,6 +9,7 @@ import ChatView from '@/components/auramind/ChatView.vue'
 import ChatInput from '@/components/auramind/ChatInput.vue'
 import ConversationList from '@/components/workspace/ConversationList.vue'
 import ContextPanel from '@/components/workspace/ContextPanel.vue'
+import ResizeHandle from '@/components/layout/ResizeHandle.vue'
 
 const documentStore = useDocumentStore()
 const modelStore = useModelStore()
@@ -30,9 +31,10 @@ const currentModelName = computed(() => {
   <!-- 工作区为自包含三栏（Rail 由外壳提供，这里渲染：会话列 + 对话主区 + 检查器）。
        外壳对该视图关闭独立 sidebar，避免重复面板。 -->
   <div class="flex min-h-0 flex-1">
-    <!-- 会话列（276px） -->
+    <!-- 会话列（可调宽度） -->
     <aside
-      class="hidden w-[276px] shrink-0 flex-col border-r border-line bg-white md:flex"
+      class="relative hidden shrink-0 flex-col border-r border-line bg-white md:flex"
+      :style="{ width: uiStore.convListWidth + 'px' }"
     >
       <div
         class="flex h-[60px] shrink-0 items-center gap-2 border-b border-line px-4"
@@ -47,6 +49,12 @@ const currentModelName = computed(() => {
       <div class="scrollbar min-h-0 flex-1 overflow-y-auto">
         <ConversationList />
       </div>
+      <!-- 右边缘拖拽把手 -->
+      <ResizeHandle
+        class="absolute inset-y-0 right-0"
+        side="right"
+        @resize="uiStore.setConvListWidth(uiStore.convListWidth + $event)"
+      />
     </aside>
 
     <!-- 对话主区 -->
@@ -104,10 +112,11 @@ const currentModelName = computed(() => {
       </div>
     </div>
 
-    <!-- 检查器（304px，≤1179px 隐藏；由 uiStore.inspectorOpen 控制） -->
+    <!-- 检查器（可调宽度，≤1179px 隐藏；由 uiStore.inspectorOpen 控制） -->
     <aside
       v-if="uiStore.inspectorOpen"
-      class="hidden w-[304px] shrink-0 flex-col border-l border-line bg-panel xl:flex"
+      class="relative hidden shrink-0 flex-col border-l border-line bg-panel xl:flex"
+      :style="{ width: uiStore.inspectorWidth + 'px' }"
     >
       <div
         class="flex h-[60px] shrink-0 items-center justify-between border-b border-line px-4"
@@ -117,6 +126,12 @@ const currentModelName = computed(() => {
       <div class="scrollbar min-h-0 flex-1 overflow-y-auto">
         <ContextPanel />
       </div>
+      <!-- 左边缘拖拽把手 -->
+      <ResizeHandle
+        class="absolute inset-y-0 left-0"
+        side="left"
+        @resize="uiStore.setInspectorWidth(uiStore.inspectorWidth + $event)"
+      />
     </aside>
   </div>
 </template>

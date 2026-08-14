@@ -80,7 +80,7 @@ const sidebarConfig = computed<{ title: string; subtitle?: string; show: boolean
 </script>
 
 <template>
-  <div class="h-screen overflow-hidden bg-panel text-ink">
+  <div class="flex h-screen w-screen overflow-hidden bg-panel text-ink">
     <!-- 移动端侧栏遮罩 -->
     <div
       v-if="mobile && uiStore.sidebarOpen"
@@ -95,32 +95,48 @@ const sidebarConfig = computed<{ title: string; subtitle?: string; show: boolean
       @toggle-sidebar="uiStore.toggleSidebar()"
     />
 
-    <AppSidebar
-      v-if="sidebarConfig.show"
-      :title="sidebarConfig.title"
-      :subtitle="sidebarConfig.subtitle"
-      :sidebar-open="uiStore.sidebarOpen"
-      :mobile="mobile"
-    >
-      <!-- 视图通过 <Teleport to="#shell-sidebar"> 注入列表内容 -->
-      <div id="shell-sidebar" class="min-h-0 flex-1">
-        <div class="p-3 text-center text-xs text-muted">
-          {{ sidebarConfig.title }} 列表（待接入）
+    <!-- 桌面端：Rail + Sidebar + Main 水平 flex 排列，撑满全屏 -->
+    <template v-if="!mobile">
+      <!-- 外壳功能侧栏（可调宽度），仅在需要侧栏的视图显示 -->
+      <AppSidebar
+        v-if="sidebarConfig.show"
+        :title="sidebarConfig.title"
+        :subtitle="sidebarConfig.subtitle"
+        :width="uiStore.sidebarWidth"
+      >
+        <div id="shell-sidebar" class="min-h-0 flex-1">
+          <div class="p-3 text-center text-xs text-muted">
+            {{ sidebarConfig.title }} 列表（待接入）
+          </div>
         </div>
-      </div>
-    </AppSidebar>
+      </AppSidebar>
 
-    <!-- 主区：桌面 ml-[344px]（68+276），无侧栏视图 ml-[68px]，移动 ml-0 -->
-    <main
-      :class="[
-        'flex h-screen min-h-0 flex-col',
-        !mobile && sidebarConfig.show && 'ml-[344px]',
-        !mobile && !sidebarConfig.show && 'ml-[68px]',
-        mobile && 'ml-0',
-      ]"
-    >
-      <RouterView />
-    </main>
+      <!-- 主区：flex-1 占据剩余宽度 -->
+      <main class="flex min-h-0 min-w-0 flex-1 flex-col">
+        <RouterView />
+      </main>
+    </template>
+
+    <!-- 移动端：Rail 隐藏（底部导航），Sidebar 抽屉，main 占满 -->
+    <template v-else>
+      <AppSidebar
+        v-if="sidebarConfig.show"
+        :title="sidebarConfig.title"
+        :subtitle="sidebarConfig.subtitle"
+        :sidebar-open="uiStore.sidebarOpen"
+        :mobile="true"
+      >
+        <div id="shell-sidebar" class="min-h-0 flex-1">
+          <div class="p-3 text-center text-xs text-muted">
+            {{ sidebarConfig.title }} 列表（待接入）
+          </div>
+        </div>
+      </AppSidebar>
+
+      <main class="flex min-h-0 min-w-0 flex-1 flex-col pb-[58px]">
+        <RouterView />
+      </main>
+    </template>
 
     <Toaster />
   </div>

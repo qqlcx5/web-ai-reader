@@ -41,10 +41,10 @@ function navigate(to: string) {
 </script>
 
 <template>
-  <!-- 桌面导轨：固定左侧 68px -->
+  <!-- 桌面导轨：flex 子元素，固定 68px 宽 -->
   <aside
     v-if="!mobile"
-    class="rail fixed inset-y-0 left-0 z-40 flex w-[68px] flex-col items-center border-r border-line bg-white py-4"
+    class="rail flex w-[68px] shrink-0 flex-col items-center border-r border-line bg-white py-4"
   >
     <div class="mb-8 flex h-10 w-10 items-center justify-center">
       <LogoMark />

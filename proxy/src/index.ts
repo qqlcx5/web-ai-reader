@@ -1,22 +1,19 @@
 /**
  * AuraMind Web 代理服务 — Cloudflare Worker
  *
- * 提供三个端点，补齐浏览器 CORS 受限的能力：
- *   POST /extract     { url }                       → 抓取网页并用 defuddle 提取正文
- *   POST /feed-fetch  { url, etag?, lastModified? } → 条件 GET RSS/Atom 源
- *   GET  /healthz                                    → 健康检查
+ * 提供以下端点，补齐浏览器 CORS 受限的能力：
+ *   POST /extract       { url }                       → 抓取网页并用 defuddle 提取正文
+ *   POST /feed-fetch    { url, etag?, lastModified? } → 条件 GET RSS/Atom 源
+ *   POST /s3-proxy      { url, method, headers, body } → 中继 S3 请求（绕 CORS）
+ *   POST /webdav-proxy  { url, method, headers, body } → 中继 WebDAV 请求（绕 CORS）
+ *   GET  /healthz                                      → 健康检查
  *
  * AI 调用不经过本代理（浏览器侧直连各 Provider）。
- *
- * 提取逻辑与前端 src/utils/content/extract.ts 对齐：
- *   - defuddle/node 的 Defuddle(html, url) 在 Worker 内构建 DOM 并返回 content(HTML)
- *   - defuddle/full 的 createMarkdownContent 依赖浏览器 document，Worker 不可用
- *     → 改用 turndown + linkedom 把 defuddle 返回的 content HTML 转成 Markdown
- *   - SHA-256 / 字数 / token 估算复用与前端一致的纯函数
  */
 
 import { extractUrl } from './extract'
 import { fetchFeed } from './feed-fetch'
+import { proxyFetch, type ProxyRequest } from './proxy-fetch'
 
 export interface Env {
   // 预留：未来可加 ALLOWED_ORIGIN / API_TOKEN 等环境变量
@@ -53,6 +50,16 @@ export default {
           lastModified:
             typeof body?.lastModified === 'string' ? body.lastModified : undefined,
         })
+        return json(result)
+      }
+
+      if (
+        (url.pathname === '/s3-proxy' || url.pathname === '/webdav-proxy') &&
+        request.method === 'POST'
+      ) {
+        const body = (await readJson(request)) as ProxyRequest
+        if (!body?.url) return jsonError(400, 'missing "url"')
+        const result = await proxyFetch(body)
         return json(result)
       }
 
